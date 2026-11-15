@@ -1,4 +1,4 @@
-// 혼계숯불치킨 — 첫 화면 불씨 + 가맹 문의 폼
+// 혼계숯불치킨 — 첫 화면 불씨 + UTM 유입 채널 + 가맹 문의 폼
 
 // 1) 첫 화면 불씨: 숯불에서 올라오는 작은 불티. 움직임 줄이기 설정이면 그리지 않는다.
 (function embers() {
@@ -58,7 +58,40 @@
   document.addEventListener('visibilitychange', () => { document.hidden ? stop() : start(); });
 })();
 
-// 2) 가맹 문의 폼 → /api/inquiry
+// 2) UTM 유입 채널: 주소의 utm_* 값과 들어온 곳(리퍼러 사이트 이름)을 이 탭에만 기억한다.
+//    쿠키를 쓰지 않고, 개인을 알아볼 수 있는 값은 담지 않는다.
+const channel = (function utm() {
+  const KEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'];
+  const STORE = 'honkye-utm', SEEN = 'honkye-visit';
+  const read = (k) => { try { return sessionStorage.getItem(k); } catch { return null; } };
+  const write = (k, v) => { try { sessionStorage.setItem(k, v); } catch {} };
+
+  const q = new URLSearchParams(location.search);
+  let data = null;
+  if (KEYS.some((k) => q.get(k))) {             // 주소에 utm이 있으면 그 값으로 기억
+    data = {};
+    KEYS.forEach((k) => { data[k] = (q.get(k) || '').trim().slice(0, 100); });
+  } else {
+    try { data = JSON.parse(read(STORE) || 'null'); } catch { data = null; }
+  }
+  if (!data) { data = {}; KEYS.forEach((k) => { data[k] = ''; }); }
+  if (data.referrer == null) {
+    let host = '';
+    try { const h = new URL(document.referrer).hostname; if (h && h !== location.hostname) host = h; } catch {}
+    data.referrer = host.slice(0, 100);
+  }
+  write(STORE, JSON.stringify(data));
+
+  if (!read(SEEN)) {                             // 방문은 탭마다 한 번만 센다
+    write(SEEN, '1');
+    try {
+      fetch('/api/visit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data), keepalive: true }).catch(() => {});
+    } catch {}
+  }
+  return data;
+})();
+
+// 3) 가맹 문의 폼 → /api/inquiry
 (function inquiryForm() {
   const form = document.getElementById('inquiry-form');
   if (!form) return;
@@ -74,6 +107,7 @@
       message: form.message.value.trim(),
       website: form.website.value,
       consent: form.consent.checked,   // 반드시 true/false
+      ...channel,                      // 유입 채널(utm_*, referrer)
     };
     if (!data.name || !data.contact) { say('이름과 연락처를 적어 주세요', 'err'); (data.name ? form.contact : form.name).focus(); return; }
     if (!data.consent) { say('개인정보 수집·이용에 동의해 주세요', 'err'); form.consent.focus(); return; }

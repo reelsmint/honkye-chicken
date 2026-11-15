@@ -104,6 +104,7 @@
 - 문의 저장: 예 → Supabase(leaderpl-admin 스킬) + /admin
 - 회원가입: 이번엔 아니요
 - 배포: GitHub 공개 저장소 + Vercel
+- 유입 채널 추적(UTM): 주소의 utm_source·utm_medium·utm_campaign·utm_term·utm_content와 들어온 사이트 이름을 방문·문의에 함께 기록한다. 쿠키와 IP는 쓰지 않는다. /admin의 「유입 채널」 탭에서 최근 30일 채널별 방문 수·문의 수를 보고, 추적 링크를 만든다.
 
 ## 13. 만드는 순서 (클로드가 처음부터 끝까지 한 번에)
 1. 스타일(색·글꼴)을 분위기에 맞게 정하고 첫 화면부터 만든다

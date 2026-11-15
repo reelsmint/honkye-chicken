@@ -38,6 +38,23 @@
   .states { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
   .states button { min-height:48px; border-radius:10px; border:1px solid var(--line); background:transparent; color:var(--ash); font-weight:600; }
   .states button[aria-pressed="true"] { background:var(--brass); border-color:var(--brass); color:var(--soot); }
+  .from { margin:0 0 12px; font-size:.95rem; }
+  .from b { color:var(--brass-hi); font-weight:700; }
+
+  .tabs { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:20px; }
+  .tabs button { min-height:48px; border-radius:12px; border:1px solid var(--line); background:transparent; color:var(--ash); font-weight:700; }
+  .tabs button[aria-selected="true"] { background:var(--bone); border-color:var(--bone); color:var(--soot); }
+  h2 { margin:28px 0 6px; color:var(--bone); font-size:1.15rem; }
+  .hint { margin:0 0 14px; font-size:.95rem; }
+  .ch { display:grid; grid-template-columns:1fr auto auto; gap:4px 20px; align-items:baseline; }
+  .ch .ch-name { color:var(--bone); font-size:1.15rem; font-weight:700; }
+  .ch .ch-sub { grid-column:1 / -1; font-size:.9rem; }
+  .ch .num { text-align:right; font-variant-numeric:tabular-nums; }
+  .ch .num b { display:block; color:var(--bone); font-size:1.4rem; line-height:1.2; }
+  .ch .num.is-inq b { color:var(--brass-hi); }
+  .maker label { display:block; margin:12px 0 6px; color:var(--bone); font-weight:600; }
+  .maker input { width:100%; min-height:48px; padding:0 14px; border-radius:12px; border:1px solid var(--line); background:var(--soot); color:var(--bone); font:inherit; }
+  .maker output { display:block; margin:16px 0 12px; padding:12px 14px; border-radius:12px; border:1px dashed var(--line); color:var(--bone); font-size:.98rem; word-break:break-all; }
 </style>
 </head>
 <body>
@@ -62,9 +79,35 @@
         <button class="btn" id="logout" type="button">나가기</button>
       </div>
     </div>
-    <div class="count">새 문의 <b id="new-count">0</b></div>
+    <div class="tabs" role="tablist">
+      <button type="button" role="tab" id="tab-inbox" aria-selected="true" aria-controls="pane-inbox">문의함</button>
+      <button type="button" role="tab" id="tab-channels" aria-selected="false" aria-controls="pane-channels">유입 채널</button>
+    </div>
     <p id="list-msg" role="status" aria-live="polite"></p>
-    <div id="list"></div>
+
+    <div id="pane-inbox" role="tabpanel" aria-labelledby="tab-inbox">
+      <div class="count">새 문의 <b id="new-count">0</b></div>
+      <div id="list"></div>
+    </div>
+
+    <div id="pane-channels" role="tabpanel" aria-labelledby="tab-channels" hidden>
+      <h2>최근 30일 유입 채널</h2>
+      <p class="hint">손님이 어디서 보고 왔는지, 그중 몇 명이 문의를 남겼는지 보여 줘요.</p>
+      <div id="channels"></div>
+
+      <h2>추적 링크 만들기</h2>
+      <p class="hint">배달 앱 가게 소개, 인스타 프로필, 전단지 QR에 이 링크를 넣으면 그 채널로 들어온 방문과 문의가 따로 세어져요.</p>
+      <form class="card maker" id="maker">
+        <label for="mk-source">채널 이름 (영문·숫자, 예: baemin, instagram, flyer)</label>
+        <input id="mk-source" type="text" autocomplete="off" maxlength="50" placeholder="baemin">
+        <label for="mk-medium">종류 (선택, 예: app, sns, qr)</label>
+        <input id="mk-medium" type="text" autocomplete="off" maxlength="50">
+        <label for="mk-campaign">행사 이름 (선택, 예: open-event)</label>
+        <input id="mk-campaign" type="text" autocomplete="off" maxlength="50">
+        <output id="mk-out" for="mk-source mk-medium mk-campaign">채널 이름을 적으면 링크가 만들어져요.</output>
+        <button class="btn btn-gold" id="mk-copy" type="button">링크 복사</button>
+      </form>
+    </div>
   </section>
 
 </main>
@@ -84,8 +127,8 @@
     loginMsg.textContent = text || ''; pw.value = ''; pw.focus();
   }
 
-  async function api(method, body) {
-    const r = await fetch('/api/admin', {
+  async function api(method, body, query) {
+    const r = await fetch('/api/admin' + (query || ''), {
       method, cache: 'no-store',
       headers: { 'x-admin-password': getPw(), ...(body ? { 'Content-Type': 'application/json' } : {}) },
       body: body ? JSON.stringify(body) : undefined,
@@ -136,7 +179,11 @@
         });
         states.append(b);
       }
-      card.append(meta, el('p', 'name', row.name), contact, message, states);
+      const from = el('p', 'from', '유입 채널 ');
+      from.append(el('b', '', row.utm_source || row.referrer || '직접 방문'));
+      const extra = [row.utm_medium, row.utm_campaign].filter(Boolean).join(' / ');
+      if (extra) from.append(' (' + extra + ')');
+      card.append(meta, el('p', 'name', row.name), contact, message, from, states);
       list.append(card);
     }
   }
@@ -164,7 +211,64 @@
     const ok = await load();
     if (!ok && box.hidden) { setPw(''); pw.value = ''; pw.focus(); }
   });
-  $('reload').addEventListener('click', load);
+  // 유입 채널 탭
+  const channels = $('channels');
+  async function loadChannels() {
+    listMsg.textContent = '불러오는 중이에요…';
+    let r;
+    try { r = await api('GET', null, '?view=channels'); } catch { listMsg.textContent = '불러오지 못했어요. 인터넷 연결을 확인해 주세요.'; return; }
+    if (r.status === 401) return showLogin('비밀번호가 맞지 않아요.');
+    if (!r.ok) { listMsg.textContent = r.out.error || '불러오지 못했어요.'; return; }
+    const rows = r.out.rows || [];
+    listMsg.textContent = '';
+    channels.replaceChildren();
+    if (!rows.length) { channels.append(el('p', 'hint', '아직 기록된 방문이 없어요.')); return; }
+    for (const x of rows) {
+      const card = el('article', 'card ch');
+      const v = el('div', 'num', '방문'); v.prepend(el('b', '', String(x.visits)));
+      const q = el('div', 'num is-inq', '문의'); q.prepend(el('b', '', String(x.inquiries)));
+      card.append(el('div', 'ch-name', x.channel), v, q);
+      const sub = [x.medium && '종류 ' + x.medium, x.campaign && '행사 ' + x.campaign].filter(Boolean).join(' · ');
+      if (sub) card.append(el('div', 'ch-sub', sub));
+      channels.append(card);
+    }
+  }
+
+  let tab = 'inbox';
+  function showTab(name) {
+    tab = name;
+    $('tab-inbox').setAttribute('aria-selected', String(name === 'inbox'));
+    $('tab-channels').setAttribute('aria-selected', String(name === 'channels'));
+    $('pane-inbox').hidden = name !== 'inbox';
+    $('pane-channels').hidden = name !== 'channels';
+    name === 'inbox' ? load() : loadChannels();
+  }
+  $('tab-inbox').addEventListener('click', () => showTab('inbox'));
+  $('tab-channels').addEventListener('click', () => showTab('channels'));
+
+  // 추적 링크 만들기
+  const mkOut = $('mk-out');
+  const slug = (v) => v.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9._-]/g, '');
+  function makeLink() {
+    const s = slug($('mk-source').value), m = slug($('mk-medium').value), c = slug($('mk-campaign').value);
+    if (!s) { mkOut.textContent = '채널 이름을 적으면 링크가 만들어져요.'; return ''; }
+    const p = new URLSearchParams({ utm_source: s });
+    if (m) p.set('utm_medium', m);
+    if (c) p.set('utm_campaign', c);
+    const url = location.origin + '/?' + p.toString();
+    mkOut.textContent = url;
+    return url;
+  }
+  $('maker').addEventListener('input', makeLink);
+  $('maker').addEventListener('submit', (e) => e.preventDefault());
+  $('mk-copy').addEventListener('click', async () => {
+    const url = makeLink();
+    if (!url) { $('mk-source').focus(); return; }
+    try { await navigator.clipboard.writeText(url); listMsg.textContent = '링크를 복사했어요.'; }
+    catch { const s = getSelection(), rg = document.createRange(); rg.selectNodeContents(mkOut); s.removeAllRanges(); s.addRange(rg); }
+  });
+
+  $('reload').addEventListener('click', () => (tab === 'inbox' ? load() : loadChannels()));
   $('logout').addEventListener('click', () => showLogin(''));
 
   if (getPw()) load(); else pw.focus();

@@ -21,6 +21,25 @@ module.exports = async (req, res) => {
   if (!same(req.headers['x-admin-password'] || '', pass)) return res.status(401).json({ error: '비밀번호가 맞지 않아요.' });
   if (!SB_URL || !SB_KEY) return res.status(500).json({ error: 'Supabase 연결 정보가 없어요.' });
 
+  // 유입 채널: 최근 30일 방문 수와 문의 수를 채널별로
+  if (req.method === 'GET' && String(req.query?.view || '') === 'channels') {
+    const [v, q] = await Promise.all([
+      fetch(`${SB_URL}/rest/v1/visit_channels_30d?select=*`, { headers: sbHeaders() }),
+      fetch(`${SB_URL}/rest/v1/inquiry_channels_30d?select=*`, { headers: sbHeaders() }),
+    ]);
+    if (!v.ok || !q.ok) return res.status(500).json({ error: '불러오지 못했어요.' });
+    const map = new Map();
+    const slot = (x) => {
+      const k = [x.channel, x.medium, x.campaign].join('\u0001');
+      if (!map.has(k)) map.set(k, { channel: x.channel, medium: x.medium, campaign: x.campaign, visits: 0, inquiries: 0 });
+      return map.get(k);
+    };
+    for (const x of await v.json()) slot(x).visits += Number(x.visits) || 0;
+    for (const x of await q.json()) slot(x).inquiries += Number(x.inquiries) || 0;
+    const rows = [...map.values()].sort((a, b) => b.inquiries - a.inquiries || b.visits - a.visits);
+    return res.status(200).json({ rows });
+  }
+
   if (req.method === 'GET') {
     const r = await fetch(`${SB_URL}/rest/v1/inquiries?select=*&order=created_at.desc&limit=500`, { headers: sbHeaders() });
     if (!r.ok) return res.status(500).json({ error: '불러오지 못했어요.' });
