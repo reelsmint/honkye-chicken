@@ -79,9 +79,9 @@ h2 { color: var(--bone); font-size: clamp(2.8rem, 8vw, 6rem); line-height: 1.05;
   -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
   border-bottom: 1px solid rgba(47, 42, 38, .8);
 }
-.brand { display: inline-flex; align-items: baseline; gap: 6px; text-decoration: none; margin-right: auto; transform: skewX(var(--slant)); }
-.brand-name { font-family: var(--display); font-size: 1.75rem; color: var(--bone); }
-.brand-kind { font-family: var(--display); font-size: 1.75rem; color: var(--ember); }
+.brand { display: inline-flex; align-items: center; gap: 12px; text-decoration: none; margin-right: auto; }
+.brand-logo { display: block; height: 40px; width: auto; }   /* 간판 붓글씨 '혼계' */
+.brand-kind { display: inline-block; font-family: var(--display); font-size: 1.6rem; color: var(--ember); transform: skewX(var(--slant)); }
 .top-nav { display: flex; gap: 32px; }
 .top-nav a { text-decoration: none; color: var(--bone); font-weight: 700; font-size: 1.05rem; padding: 8px 0; }
 .top-nav a:hover { color: var(--ember-hi); }
@@ -108,6 +108,11 @@ h2 { color: var(--bone); font-size: clamp(2.8rem, 8vw, 6rem); line-height: 1.05;
   color: var(--ember);
   font-size: clamp(2.7rem, 10.6vw, 10rem);
   line-height: 1.02; letter-spacing: -0.02em;
+}
+.hero-logo {
+  display: inline-block; height: 1.12em; width: auto;
+  vertical-align: -0.2em; margin-right: .14em;
+  transform: skewX(calc(var(--slant) * -1));   /* 붓글씨는 기울이지 않는다 */
 }
 .hero-lead { margin-top: clamp(24px, 4vh, 40px); font-size: clamp(1.1rem, 1.7vw, 1.4rem); color: var(--bone); max-width: 34em; }
 .hero-actions { margin-top: 32px; display: flex; flex-wrap: wrap; gap: 12px; }
@@ -198,7 +203,7 @@ h2 { color: var(--bone); font-size: clamp(2.8rem, 8vw, 6rem); line-height: 1.05;
 /* 바닥 */
 .foot { padding-block: 48px 56px; border-top: 1px solid var(--line); }
 .foot-inner { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 12px 32px; }
-.foot-brand { display: inline-flex; align-items: baseline; gap: 6px; transform: skewX(var(--slant)); }
+.foot-brand { display: inline-flex; align-items: center; gap: 12px; }
 
 /* 폰 아래쪽 고정 버튼 */
 .dock { display: none; }
