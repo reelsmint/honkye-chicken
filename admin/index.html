@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>문의함 — 혼계숯불치킨 관리자</title>
+<style>
+  :root { --char:#171412; --soot:#0f0d0c; --slab:#211d1a; --line:#3a332d; --ash:#b8aea2; --bone:#f2ebdf; --brass:#c9a25a; --brass-hi:#dcb878; --warn:#ff9a76; }
+  *,*::before,*::after { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin:0; background:var(--char); color:var(--ash); font:17px/1.6 -apple-system,"Pretendard","Malgun Gothic","Apple SD Gothic Neo",sans-serif; word-break:keep-all; overflow-wrap:anywhere; }
+  main { max-width:640px; margin:0 auto; padding:24px 16px 80px; }
+  h1 { margin:0 0 4px; color:var(--bone); font-size:1.4rem; }
+  .sub { margin:0 0 24px; font-size:.95rem; }
+  :focus-visible { outline:2px solid var(--brass-hi); outline-offset:2px; }
+  button { font:inherit; cursor:pointer; }
+  .btn { min-height:48px; padding:0 20px; border-radius:12px; border:1px solid var(--line); background:var(--slab); color:var(--bone); font-weight:600; }
+  .btn-gold { background:var(--brass); border-color:var(--brass); color:var(--soot); }
+
+  #login { margin-top:15vh; }
+  #login label { display:block; margin-bottom:8px; color:var(--bone); font-weight:600; }
+  #login input { width:100%; min-height:52px; padding:0 16px; border-radius:12px; border:1px solid var(--line); background:var(--soot); color:var(--bone); font:inherit; font-size:1.1rem; }
+  #login .btn { width:100%; margin-top:12px; }
+  #login-msg { margin-top:12px; min-height:1.6em; color:var(--warn); font-weight:600; }
+
+  .bar { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:16px; }
+  .count { background:var(--slab); border:1px solid var(--line); border-radius:16px; padding:20px; margin-bottom:20px; }
+  .count b { display:block; color:var(--brass-hi); font-size:3rem; line-height:1.1; font-variant-numeric:tabular-nums; }
+  #list-msg { margin:12px 0; min-height:1.6em; }
+  .card { background:var(--slab); border:1px solid var(--line); border-radius:16px; padding:16px; margin-bottom:12px; }
+  .card.is-new { border-color:var(--brass); }
+  .meta { display:flex; justify-content:space-between; gap:12px; font-size:.9rem; }
+  .name { margin:6px 0 2px; color:var(--bone); font-size:1.2rem; font-weight:700; }
+  .contact { display:inline-block; margin:4px 0 8px; padding:8px 12px; border-radius:10px; border:1px dashed var(--line); background:transparent; color:var(--bone); font-size:1.1rem; font-variant-numeric:tabular-nums; }
+  .message { margin:0 0 12px; white-space:pre-wrap; color:var(--bone); }
+  .message.is-empty { color:var(--ash); }
+  .states { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+  .states button { min-height:48px; border-radius:10px; border:1px solid var(--line); background:transparent; color:var(--ash); font-weight:600; }
+  .states button[aria-pressed="true"] { background:var(--brass); border-color:var(--brass); color:var(--soot); }
+</style>
+</head>
+<body>
+<main>
+
+  <section id="login">
+    <h1>혼계숯불치킨 문의함</h1>
+    <p class="sub">관리자 비밀번호를 입력해 주세요.</p>
+    <form id="login-form">
+      <label for="pw">비밀번호</label>
+      <input id="pw" type="password" autocomplete="current-password" required>
+      <button class="btn btn-gold" type="submit">문의함 열기</button>
+    </form>
+    <p id="login-msg" role="alert"></p>
+  </section>
+
+  <section id="box" hidden>
+    <div class="bar">
+      <h1>문의함</h1>
+      <div>
+        <button class="btn" id="reload" type="button">새로고침</button>
+        <button class="btn" id="logout" type="button">나가기</button>
+      </div>
+    </div>
+    <div class="count">새 문의 <b id="new-count">0</b></div>
+    <p id="list-msg" role="status" aria-live="polite"></p>
+    <div id="list"></div>
+  </section>
+
+</main>
+<script>
+(function () {
+  const KEY = 'honkye-admin-pw';       // sessionStorage: 탭을 닫으면 사라진다
+  const STATUSES = ['새 문의', '연락함', '완료'];
+  const $ = (id) => document.getElementById(id);
+  const login = $('login'), box = $('box'), pw = $('pw'), loginMsg = $('login-msg');
+  const list = $('list'), listMsg = $('list-msg'), newCount = $('new-count');
+
+  const getPw = () => { try { return sessionStorage.getItem(KEY) || ''; } catch { return ''; } };
+  const setPw = (v) => { try { v ? sessionStorage.setItem(KEY, v) : sessionStorage.removeItem(KEY); } catch {} };
+
+  function showLogin(text) {
+    setPw(''); box.hidden = true; login.hidden = false;
+    loginMsg.textContent = text || ''; pw.value = ''; pw.focus();
+  }
+
+  async function api(method, body) {
+    const r = await fetch('/api/admin', {
+      method, cache: 'no-store',
+      headers: { 'x-admin-password': getPw(), ...(body ? { 'Content-Type': 'application/json' } : {}) },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const out = await r.json().catch(() => ({}));
+    return { ok: r.ok, status: r.status, out };
+  }
+
+  const fmt = (iso) => {
+    const d = new Date(iso);
+    if (isNaN(d)) return '';
+    const p = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}.${p(d.getMonth() + 1)}.${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  };
+
+  function el(tag, cls, text) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;   // 손님이 쓴 글은 textContent로만 넣는다
+    return e;
+  }
+
+  function render(rows) {
+    list.replaceChildren();
+    newCount.textContent = rows.filter((r) => r.status === '새 문의').length;
+    listMsg.textContent = rows.length ? '' : '아직 들어온 문의가 없어요.';
+    for (const row of rows) {
+      const card = el('article', 'card' + (row.status === '새 문의' ? ' is-new' : ''));
+      const meta = el('div', 'meta');
+      meta.append(el('span', '', fmt(row.created_at)), el('span', '', row.status));
+      const contact = el('button', 'contact', row.contact);
+      contact.type = 'button'; contact.title = '눌러서 복사';
+      contact.addEventListener('click', async () => {
+        try { await navigator.clipboard.writeText(row.contact); listMsg.textContent = '연락처를 복사했어요.'; }
+        catch { const s = getSelection(), rg = document.createRange(); rg.selectNodeContents(contact); s.removeAllRanges(); s.addRange(rg); }
+      });
+      const message = el('p', 'message' + (row.message ? '' : ' is-empty'), row.message || '(문의 내용 없음)');
+      const states = el('div', 'states');
+      for (const s of STATUSES) {
+        const b = el('button', '', s);
+        b.type = 'button'; b.setAttribute('aria-pressed', String(row.status === s));
+        b.addEventListener('click', async () => {
+          if (row.status === s) return;
+          const r = await api('PATCH', { id: row.id, status: s });
+          if (r.status === 401) return showLogin('비밀번호가 맞지 않아요.');
+          if (!r.ok) { listMsg.textContent = r.out.error || '바꾸지 못했어요.'; return; }
+          load();
+        });
+        states.append(b);
+      }
+      card.append(meta, el('p', 'name', row.name), contact, message, states);
+      list.append(card);
+    }
+  }
+
+  async function load() {
+    listMsg.textContent = '불러오는 중이에요…';
+    let r;
+    try { r = await api('GET'); } catch { listMsg.textContent = '불러오지 못했어요. 인터넷 연결을 확인해 주세요.'; return false; }
+    if (r.status === 401) { showLogin('비밀번호가 맞지 않아요.'); return false; }
+    if (!r.ok) {
+      if (box.hidden) { loginMsg.textContent = r.out.error || '불러오지 못했어요.'; }
+      else { listMsg.textContent = r.out.error || '불러오지 못했어요.'; }
+      return false;
+    }
+    login.hidden = true; box.hidden = false;
+    render(r.out.rows || []);
+    return true;
+  }
+
+  $('login-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!pw.value) return;
+    loginMsg.textContent = '';
+    setPw(pw.value);
+    const ok = await load();
+    if (!ok && box.hidden) { setPw(''); pw.value = ''; pw.focus(); }
+  });
+  $('reload').addEventListener('click', load);
+  $('logout').addEventListener('click', () => showLogin(''));
+
+  if (getPw()) load(); else pw.focus();
+})();
+</script>
+</body>
+</html>
